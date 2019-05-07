@@ -48,6 +48,39 @@ typedef enum
 } METHOD;
 
 /*
+	send html file to the browser
+*/
+static bool sendHTMLpage(int sockfd, const char *const fileName)
+{
+	char buff[2049];	
+	int n;
+	// get the size of the file first;
+	struct stat st;
+	stat(fileName, &st);
+	n = sprintf(buff, HTTP_200_FORMAT, (long long int) st.st_size);
+	// sned the heaeder first
+	int filefd = open(fileName, O_RDONLY);
+	if (write(sockfd, buff, n) < 0)
+	{
+		perror("write");
+        return false;
+    }
+    do
+    {
+    	n = sendfile(sockfd, filefd, NULL, 2048);
+    }
+    while (n > 0);
+    if (n < 0)
+    {
+    	perror("sendfile");
+    	close(filefd);
+        return false;
+    }
+    close(filefd);
+    return true;
+}
+
+/*
 	this function is adapted from the sample code on LMS, http-server.c,
 	and some changes are made.
 */
