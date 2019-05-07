@@ -47,6 +47,8 @@ typedef enum
     UNKNOWN
 } METHOD;
 
+
+
 /*
 	send html file to the browser
 */
@@ -124,33 +126,10 @@ static bool handle_http_request(int sockfd)
         // sanitise the URI
     while (*req == '.' || *req == '/')
         ++req;
-    if (*curr == ' ')
+    if (*req == ' ')
         if (method == GET)
         {
-            // get the size of the file
-            struct stat st;
-            stat("lab6-GET.html", &st);
-            n = sprintf(buff, HTTP_200_FORMAT, st.st_size);
-            // send the header first
-            if (write(sockfd, buff, n) < 0)
-            {
-                perror("write");
-                return false;
-            }
-            // send the file
-            int filefd = open("lab6-GET.html", O_RDONLY);
-            do
-            {
-                n = sendfile(sockfd, filefd, NULL, 2048);
-            }
-            while (n > 0);
-            if (n < 0)
-            {
-                perror("sendfile");
-                close(filefd);
-                return false;
-            }
-            close(filefd);
+            return sendHTMLpage;
         }
         else if (method == POST)
         {
