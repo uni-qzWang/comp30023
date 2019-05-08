@@ -39,6 +39,11 @@ static char const * const DISCARDED = "5_discarded.html";
 static char const * const ENDGAME = "6_endgame.html";
 static char const * const GAMEOVER = "7_gameover.html";
 
+int p1_sockfd = -1;
+int p2_sockfd = -1;
+char player1[1024] = "";
+char player2[1024] = "";
+
 // represents three types of request method
 typedef enum
 {
@@ -59,7 +64,7 @@ static bool sendHTMLpage(int sockfd, const char *const fileName)
 	// get the size of the file first;
 	struct stat st;
 	stat(fileName, &st);
-	n = sprintf(buff, HTTP_200_FORMAT, (long long int) st.st_size);
+	n = sprintf(buff, HTTP_200_FORMAT, st.st_size);
 	// sned the heaeder first
 	int filefd = open(fileName, O_RDONLY);
 	if (write(sockfd, buff, n) < 0)
@@ -81,6 +86,31 @@ static bool sendHTMLpage(int sockfd, const char *const fileName)
     close(filefd);
     return true;
 }
+
+static bool post_userName(int sockfd, char *buff) 
+{
+	char * username = strstr(buff, "user=") + 5;
+	int username_length = strlen(username);
+	
+	if (p1_sockfd == -1) 
+	{
+		p1_sockfd = sockfd;
+		strcpy(player1, username);	
+	}
+	else if (p2_sockfd == -1)
+	{
+		p2_sockfd = sockfd;
+		strcpy(player2, username);
+	}
+	else 
+		return false;
+	if (sendHTMLpage(sockfd, START))
+	{
+		return true;	
+	}
+	return false;	
+}
+
 
 /*
 	this function is adapted from the sample code on LMS, http-server.c,
@@ -129,54 +159,11 @@ static bool handle_http_request(int sockfd)
     if (*req == ' ')
         if (method == GET)
         {
-            return sendHTMLpage;
+            return sendHTMLpage(sockfd, INTRO);
         }
         else if (method == POST)
         {
-            // locate the username, it is safe to do so in this sample code, but usually the result is expected to be
-            // copied to another buffer using strcpy or strncpy to ensure that it will not be overwritten.
-            char * username = strstr(buff, "user=") + 5;
-            int username_length = strlen(username);
-            // the length needs to include the ", " before the username
-            long added_length = username_length + 2;
-
-            // get the size of the file
-            struct stat st;
-            stat("lab6-POST.html", &st);
-            // increase file size to accommodate the username
-            long size = st.st_size + added_length;
-            n = sprintf(buff, HTTP_200_FORMAT, size);
-            // send the header first
-            if (write(sockfd, buff, n) < 0)
-            {
-                perror("write");
-                return false;
-            }
-            // read the content of the HTML file
-            int filefd = open("lab6-POST.html", O_RDONLY);
-            n = read(filefd, buff, 2048);
-            if (n < 0)
-            {
-                perror("read");
-                close(filefd);
-                return false;
-            }
-            close(filefd);
-            // move the trailing part backward
-            int p1, p2;
-            for (p1 = size - 1, p2 = p1 - added_length; p1 >= size - 25; --p1, --p2)
-                buff[p1] = buff[p2];
-            ++p2;
-            // put the separator
-            buff[p2++] = ',';
-            buff[p2++] = ' ';
-            // copy the username
-            strncpy(buff + p2, username, username_length);
-            if (write(sockfd, buff, size) < 0)
-            {
-                perror("write");
-                return false;
-            }
+            return post_userName(sockfd, req);
         }
         else
             // never used, just for completeness
@@ -187,39 +174,38 @@ static bool handle_http_request(int sockfd)
         perror("write");
         return false;
     }
-	
+	return true;	
 }
 
 /* 
 	The main function here is adapted from the sample code, http-server.c,
 	provided on LMS
 */
-int main(int argc, char* argv[]) 
+int main(int argc, char * argv[])
 {
-	if (argc < 3) 
-	{
-		fprintf(stderr, "usage: %s ip port\n", argv[0]);
-        return 0;	
-	}
-	
-	printf("image_tagger server is now running at IP: %s on port %s\n", argv[1], argv[2]);
-	
-	// create TCP socket which only accept IPv4
+    if (argc < 3)
+    {
+        fprintf(stderr, "usage: %s ip port\n", argv[0]);
+        return 0;
+    }
+    printf("image_tagger server is now running at IP: %s on port %s\n", argv[1], argv[2]);
+
+    // create TCP socket which only accept IPv4
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0)
     {
         perror("socket");
         exit(EXIT_FAILURE);
     }
-	
-	// reuse the socket if possible
+
+    // reuse the socket if possible
     int const reuse = 1;
     if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(int)) < 0)
     {
         perror("setsockopt");
         exit(EXIT_FAILURE);
     }
-    
+
     // create and initialise address we will listen on
     struct sockaddr_in serv_addr;
     bzero(&serv_addr, sizeof(serv_addr));
@@ -227,14 +213,17 @@ int main(int argc, char* argv[])
     // if ip parameter is not specified
     serv_addr.sin_addr.s_addr = inet_addr(argv[1]);
     serv_addr.sin_port = htons(atoi(argv[2]));
-    
+
     // bind address to socket
     if (bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
     {
         perror("bind");
         exit(EXIT_FAILURE);
     }
-    
+
+    // listen on the socket
+    listen(sockfd, 5);
+
     // initialise an active file descriptors set
     fd_set masterfds;
     FD_ZERO(&masterfds);
@@ -242,8 +231,8 @@ int main(int argc, char* argv[])
     // record the maximum socket number
     int maxfd = sockfd;
     
-    
-     while (1)
+
+    while (1)
     {
         // monitor file descriptors
         fd_set readfds = masterfds;
@@ -273,6 +262,14 @@ int main(int argc, char* argv[])
                         // update the maximum tracker
                         if (newsockfd > maxfd)
                             maxfd = newsockfd;
+                        // print out the IP and the socket number
+                        char ip[INET_ADDRSTRLEN];
+                        printf(
+                            "new connection from %s on socket %d\n",
+                            // convert to human readable string
+                            inet_ntop(cliaddr.sin_family, &cliaddr.sin_addr, ip, INET_ADDRSTRLEN),
+                            newsockfd
+                        );
                     }
                 }
                 // a request is sent from the client
@@ -283,5 +280,6 @@ int main(int argc, char* argv[])
                 }
             }
     }
-	return 0;	
+
+    return 0;
 }
