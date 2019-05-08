@@ -111,6 +111,19 @@ static bool post_userName(int sockfd, char *buff)
 	return false;	
 }
 
+static bool quit_game(int sockfd)
+{
+	if (sockfd == p1_sockfd) 
+	{
+		p1_sockfd == -1;	
+	}
+	else if (sockfd == p2_sockfd) 
+	{
+		p2_sockfd == -1;		
+	}
+	
+	return sendHTMLpage(sockfd, GAMEOVER);
+}
 
 /*
 	this function is adapted from the sample code on LMS, http-server.c,
@@ -156,7 +169,10 @@ static bool handle_http_request(int sockfd)
         // sanitise the URI
     while (*req == '.' || *req == '/')
         ++req;
+    // handle the welcome page requests
     if (*req == ' ')
+    {
+
         if (method == GET)
         {
             return sendHTMLpage(sockfd, INTRO);
@@ -168,6 +184,22 @@ static bool handle_http_request(int sockfd)
         else
             // never used, just for completeness
             fprintf(stderr, "no other methods supported");
+    }
+    // handle the start page requests
+    // header is "/?start=Start HTTP/1.1"
+    else if (*req == '?') 
+    {
+    	req++;
+    	if (method == GET)
+        {
+            return sendHTMLpage(sockfd, FIRSTTURN);
+        }
+        else if (method == POST)
+        {
+            return quit_game(sockfd);
+        }
+    	
+    }
     // send 404
     else if (write(sockfd, HTTP_404, HTTP_404_LENGTH) < 0)
     {
