@@ -106,7 +106,7 @@ static bool quit_game(int sockfd)
 	this function has to handle the quit function in start page since 
 	the header is "POST / HTTP/1.1" not "POST /?start=Start HTTP/1.1"
 */
-static bool start_page_post_req(int sockfd, char *buff) 
+static bool welcome_page_post_req(int sockfd, char *buff) 
 {
 	if (strstr(buff, "user=") != NULL) 
 	{
@@ -133,6 +133,19 @@ static bool start_page_post_req(int sockfd, char *buff)
 	return false;	
 }
 
+
+static bool game_page_post_req(int sockfd, char *buff)
+{
+	if (strstr(buff, "keyword=") != NULL)	
+	{
+		sendHTMLpage(sockfd, ACCEPTED);	
+	}
+	else if (strstr(buff, "quit=Quit") != NULL)
+	{	
+		quit_game(sockfd);		
+	}
+	return false;
+}
 
 /*
 	this function is adapted from the sample code on LMS, http-server.c,
@@ -187,7 +200,7 @@ static bool handle_http_request(int sockfd)
         }
         else if (method == POST)
         {
-            return start_page_post_req(sockfd, req);
+            return welcome_page_post_req(sockfd, req);
         }
         else
             // never used, just for completeness
@@ -204,7 +217,7 @@ static bool handle_http_request(int sockfd)
         }
         else if (method == POST)
         {
-            return quit_game(sockfd);
+            return game_page_post_req(sockfd, req);
         }
     	
     }
