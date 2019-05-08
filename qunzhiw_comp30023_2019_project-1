@@ -87,30 +87,6 @@ static bool sendHTMLpage(int sockfd, const char *const fileName)
     return true;
 }
 
-static bool post_userName(int sockfd, char *buff) 
-{
-	char * username = strstr(buff, "user=") + 5;
-	int username_length = strlen(username);
-	
-	if (p1_sockfd == -1) 
-	{
-		p1_sockfd = sockfd;
-		strcpy(player1, username);	
-	}
-	else if (p2_sockfd == -1)
-	{
-		p2_sockfd = sockfd;
-		strcpy(player2, username);
-	}
-	else 
-		return false;
-	if (sendHTMLpage(sockfd, START))
-	{
-		return true;	
-	}
-	return false;	
-}
-
 static bool quit_game(int sockfd)
 {
 	if (sockfd == p1_sockfd) 
@@ -124,6 +100,39 @@ static bool quit_game(int sockfd)
 	
 	return sendHTMLpage(sockfd, GAMEOVER);
 }
+
+
+/* 
+	this function has to handle the quit function in start page since 
+	the header is "POST / HTTP/1.1" not "POST /?start=Start HTTP/1.1"
+*/
+static bool start_page_post_req(int sockfd, char *buff) 
+{
+	if (strstr(buff, "user=") != NULL) 
+	{
+		char * username = strstr(buff, "user=") + 5;
+		int username_length = strlen(username);
+	
+		if (p1_sockfd == -1) 
+		{
+			p1_sockfd = sockfd;
+			strcpy(player1, username);	
+		}
+		else if (p2_sockfd == -1)
+		{
+			p2_sockfd = sockfd;
+			strcpy(player2, username);
+		}
+		sendHTMLpage(sockfd, START);
+	}
+	else if (strstr(buff, "quit=Quit") != NULL)
+	{	
+		quit_game(sockfd);		
+	}
+	
+	return false;	
+}
+
 
 /*
 	this function is adapted from the sample code on LMS, http-server.c,
@@ -147,7 +156,7 @@ static bool handle_http_request(int sockfd)
     buff[n] = 0;
 	
     char * req = buff;
-    
+    printf("req is %s\n", req);
     // parse the requestion method
     METHOD method = UNKNOWN;
     if (strncmp(req, "GET ", 4) == 0)
@@ -172,14 +181,13 @@ static bool handle_http_request(int sockfd)
     // handle the welcome page requests
     if (*req == ' ')
     {
-
         if (method == GET)
         {
             return sendHTMLpage(sockfd, INTRO);
         }
         else if (method == POST)
         {
-            return post_userName(sockfd, req);
+            return start_page_post_req(sockfd, req);
         }
         else
             // never used, just for completeness
