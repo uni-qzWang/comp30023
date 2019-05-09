@@ -43,6 +43,10 @@ int p1_sockfd = -1;
 int p2_sockfd = -1;
 char player1[1024] = "";
 char player2[1024] = "";
+char p1_wordlist[2049] = "";
+char p2_wordlist[2049] = "";
+bool p1_ready = false;
+bool p2_ready = false;
 
 // represents three types of request method
 typedef enum
@@ -91,11 +95,15 @@ static bool quit_game(int sockfd)
 {
 	if (sockfd == p1_sockfd) 
 	{
-		p1_sockfd == -1;	
+		p1_sockfd == -1;
+		p1_ready = false;
+		player1[0] = '\0';
 	}
 	else if (sockfd == p2_sockfd) 
 	{
-		p2_sockfd == -1;		
+		p2_sockfd == -1;
+		p2_ready = false;
+		player2[0] = '\0';
 	}
 	
 	return sendHTMLpage(sockfd, GAMEOVER);
@@ -117,11 +125,13 @@ static bool welcome_page_post_req(int sockfd, char *buff)
 		{
 			p1_sockfd = sockfd;
 			strcpy(player1, username);	
+			p1_ready = true;
 		}
 		else if (p2_sockfd == -1)
 		{
 			p2_sockfd = sockfd;
 			strcpy(player2, username);
+			p2_ready = true;
 		}
 		sendHTMLpage(sockfd, START);
 	}
@@ -137,7 +147,11 @@ static bool welcome_page_post_req(int sockfd, char *buff)
 static bool game_page_post_req(int sockfd, char *buff)
 {
 	if (strstr(buff, "keyword=") != NULL)	
-	{
+	{	
+		if(p1_ready == false || p2_ready == false) 
+		{
+			sendHTMLpage(sockfd, DISCARDED);	
+		}
 		sendHTMLpage(sockfd, ACCEPTED);	
 	}
 	else if (strstr(buff, "quit=Quit") != NULL)
